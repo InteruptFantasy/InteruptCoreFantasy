@@ -1,4 +1,5 @@
 # NOT FOR USE < DANGER >
+# Still UnUseable
 
 # Interupt Core Fantasy
 InteruptCoreFantasy or known as ICFantasy (ICF).
@@ -28,7 +29,7 @@ A Collection Of Multi-Functions In One Plugin.
  - - [ ] Cape.
   - - [ ] Minecon Cape.
   - - [ ] Custom Cape. ( If Possible )
-- - - [ ] Wings.
+ - - [ ] Wings.
   - - [ ] Using Particle To Specific Coordinate At Player Back.
   - - [ ] Moving Wings. 
  - - [ ] Flame Fists.
