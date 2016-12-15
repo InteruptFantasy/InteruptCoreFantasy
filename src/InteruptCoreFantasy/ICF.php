@@ -1,5 +1,8 @@
 <?php
-
+//
+// Project Name : InteruptCoreFantasy (icf)
+// Summary : This Is Non Useable Yet Because It Still In Pseudo File!
+//
 namespace InteruptCoreFantasy;
 
 use pocketmine\entity\{Entity, Attribute, Effect};
@@ -22,15 +25,17 @@ use pocketmine\level\{Level, Position};
 
 
 
-class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
+class ICF PluginBase extends Listener {
 
 	const RARITY_TYPE_COMMON = 0;//COMMON RARITY
 	const RARITY_TYPE_UNCOMMON = 1;//UNCOMMON RARITY
 	const RARITY_TYPE_RARE = 2;//RARE RARITY
-	const RARITY_TYPE_MYSTHIC = 3;//MYSTHIC RARITY
+	const RARITY_TYPE_MYSTICS = 3;//MYSTICS RARITY
     const RARITY_TYPE_LEGENDARY = 4;//LEGENDARY RARITY
     const RARITY_TYPE_ANCIENT = 5;//ANCIENT RARITY
     const RARITY_TYPE_PHANTAMS = 6;//PHANTASM RARITY
+    const RARITY_TYPE_LOST = 7;//LOST RARITY
+    const RARITY_TYPE_GODLY = 8;//GODLY RARITY
 
 	const TYPE_INVALID = -1;//ANY ERROR OR BUGS WILL BE REPORTED 
 
@@ -296,6 +301,25 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
     public function getCE($ench){
         if ($ench > 99) return true;
         else return false;
+    }
+    public function getItems($text, $def = 0, $msg = ""){
+        $a = explode(":", $text);
+        if (count($a)){
+            if (!isset($a[1])) $a[1] = 0;
+            $items = Item::fromString($a[0] . ":" . $a[1]);
+            if (isset($a[2])) $items->setCount(intval($a[2]));
+            if ($items->getId() != Item::AIR){
+                return $items;
+            }
+        }
+        if ($def){
+            if ($msg != "")
+            $items = Item::fromString($def . ":0");
+            $items->setCount(1);
+            return $items;
+        }
+        if ($msg != "")
+        return null;
     }
     public function isDonator($e){
         $g = $this->purePerms->getUserDataMgr()->getGroup($e);
@@ -573,6 +597,106 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
             }
             return $effectedArea;
         }
+        public static function parseBlockList(array $array = []){
+            $blocks = [];
+            foreach ($array as $dat){
+                $temp = explode(",", str_replace(" ", "", $dat));
+                $blocks[$temp[0]] = $temp[1];
+            }
+            return $blocks;
+        }
+        public static function getBlockString(Block $block){
+            return $block->__toString() . "x:{$block->x},y:{$block->y},z{$block->z}";
+        }
+        public function getState($label, $e, $def){
+            if ($e instanceof CommandSender) $e = $e->getName();
+            $e = strtolower($e);
+            if (!isset($this->state[$e])) return $def;
+            if (!isset($this->state[$e][$label])) return $def;
+            return $this->state[$e][$label];
+        }
+        public function setState($label, $e, $v){
+            if ($e instanceof CommandSender) $e = $e->getName();
+            $e = strtolower($e);
+            if (!isset($this->state[$e])) $this->state[$e] = [];
+            $this->state[$e][$label] = $v;
+        }
+        public function unsetState($label, $e){
+            if ($e instanceof CommandSender) $e = $e->getName();
+            $e = strtolower($e);
+            if (!isset($this->state[$e])) return;
+            if (!isset($this->state[$e][$label])) return;
+            unset($this->state[$e][$label]);
+        }
+        public function customChest($e, $ctype){
+            $x = $e->getX();
+            $y = $e->getY();
+            $z = $e->getZ();
+            $levels = $e->getLevel();
+            $cc = Block::get(54);
+            $levels->setBlock(new Vector3($x, $y - 3, $z), $cc);
+            if ($ctype === self::RARITY_TYPE_COMMON){
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "Common Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+            }elseif ($ctype === self::RARITY_TYPE_UNCOMMON){
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "UnCommon Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+            }elseif ($ctype === self::RARITY_TYPE_RARE){
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "Rare Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+            }elseif ($ctype === self::RARITY_TYPE_MYSTICS){
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "Mystics Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+            }elseif ($ctype === self::RARITY_TYPE_Legendary){
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "Legendary Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+        }else{
+                $nbt = new CompoundTag("", [
+                    new ListTag("Items", []),
+                    new StringTag("id", Tile::CHEST),
+                    new StringTag("CustomName", "Normal Chest"),
+                    new IntTag("x", $x),
+                    new IntTag("y", $y - 3),
+                    new IntTag("z", $z)
+                ]);
+        }
+        $nbt->Items->setTagType(NBT::TAG_Compound);
+        $tile = Tile::createTile("Chest", $e->getLevel()->getChunk($p->getX() >> 4, $p->getZ() >> 4), $nbt);
+        for ($i = 10; $i <= 36; $i++){
+            $tile->getInventory()->addItem(new Item(54, $i, 1));
+        }
+        $e->>addWindow($tile->getInventories());
+    }
 
 
 }
