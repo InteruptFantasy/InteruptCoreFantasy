@@ -7,6 +7,17 @@ use pocketmine\nbt\tag\{CompoundTag, DoubleTag, FloatTag, ListTag};
 use pocketmine\network\protocol\{MobEffectPacket, UpdateAttributesPacket};
 use pocketmine\plugin\PluginBase;
 use pocketmine\Player;
+use pocketmine\level\particle\{AngryVillagerParticle, BubbleParticle, CriticalParticle, DustParticle, EnchantParticle, EnchantmentTableParticle, ExplodeParticle, FlameParticle, FloatingTextParticle, GenericParticle, HappyVillagerParticle, HeartParticle, HugeExplodeParticle, InkParticle, InstantEnchantParticle, ItemBreakParticle, LargeExplodeParticle, LavaDripParticle, LavaParticle, MobSpawnParticle, Particle, PortalParticle, RedstoneParticle, SmokeParticle, SplashParticle, SporeParticle, TerrainParticle, WaterDripParticle, WaterParticle};
+use pocketmine\level\sound\{ExpPickupSound, ExplodeSound};
+use pocketmine\utils\{Config, TextFormat as COLOR
+};
+use pocketmine\entity\{Creature, Effect, Entity, Human, Item as EntityItem, Living
+};
+use pocketmine\math\Vector3;
+use SQLite3;
+
+
+
 
 class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
 
@@ -52,6 +63,7 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
 
     const GAME_MASTER = "GM";//GAME MASTER [ ONLY GIVEN TO SPECIFIC PLAYER ]
     const DEFAULT = "";//ONLY GIVEN TO NORMAL PLAYER
+    const DONATOR = "#$$$#";
     const MAP = array[];//MAP SHOWS A SPECIFIC MAP
     const SURVIVAL = 0;//GAMEMODE SURVIVALS
     const CREATIVE = 1;//GAMEMODE CREATIVE
@@ -219,11 +231,11 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
         if ($c === "r") $a = COLOR::RESET;
         if ($e === "icf"){
             return COLOR::GOLD . "[" . COLOR::BOLD . COLOR::AQUA . "#" . COLOR::RESET . COLOR::GOLD . "]" . COLOR::WHITE . COLOR::RESET . $a );
-        }else if ($e === "!"){
+        }elseif ($e === "!"){
             return COLOR::BOLD . COLOR::RED . $a . "(!)" . COLOR::RESET . $a;
-        }else if ($e === "award"){
+        }elseif ($e === "award"){
             return COLOR::BOLD . COLOR::GOLD . "(" . COLOR::GREEN . "$" . COLOR::GOLD . ")" . COLOR::RESET . $a;
-        }else if ($e === "npc"){
+        }elseif ($e === "npc"){
             return COLOR::GOLD . $a;
         }
     }
@@ -258,4 +270,235 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
         },
         $text);
     }
+    public function getCE($ench){
+        if ($ench > 99) return true;
+        else return false;
+    }
+    public function isDonator($e){
+        $g = $this->purePerms->getUserDataMgr()->getGroup($e);
+        return $g->getName() != self::DONATOR;
+    }
+    public function lightning($e){
+        $l = new \pocketmine\network\protocol\AddEntityPacket();
+        $l->type = 93;
+        $l->eid = Entity::$entityCount++;
+        $l->metadata = array();
+        $l->speedX = 0;
+        $l->speedY = 0;
+        $l->speedZ = 0;
+        $l->yaw = $e->getYaw();
+        $l->pitch = $e->getPitch();
+        $l->x = $e->x;
+        $l->y = $e->y;
+        $l->z = $e->z;
+        foreach ($e->getLevel()->getPlayers() as $a){
+            $a->dataPacket($l)
+           }
+        }
+        public function commandConsole($cmd){
+            $this->getServer()->dispatchCommand(new ConsoleCommandsSender, $cmd);
+        }
+        public function food($f, $e){
+            $multi = $f === 5 ? 4.4 : $f;
+            $a = 0.0025;
+            $plus = $a = $multi * $a;
+            $e->setFood($e->getFood() = $plus);
+        }
+        public function alert(Player $e){
+            $msg = $this->c("c", "!") . "You Have Entered Combat Mode, Do Not Logout For About 10 Seconds!";
+            if (isset($this->players[$player->getName()])){
+                if ((time() - $this->players[$plauer->getName()]) > $this->interval){
+                    $e->sendMessage($msg);
+                }
+            }else{
+                $e->sendMessage($msg);
+            }
+            $this->players[$player->getName()] = time();
+        }
+        public function getParticle($particle, Vector3 $pos){
+            switch ($particle){
+                case "av":
+                case "angryvillager":
+                return new AngryVillagerParticle($pos);
+                case " et":
+                case "enchant":
+                case "enchatmenttable":
+                return new EnchantmentTableParticle($pos);
+                case "hv":
+                case "happyvillager":
+                return new HappyVillagerParticle($pos);
+                case "he":
+                case "hugeexplode":
+                return new HugeExplodeParticle($pos);
+                case "gp":
+                case "generic":
+                return GenericParticle($pos);
+                case "ie":
+                case "instantenchant":
+                return new InstantEnchantParticle($pos);
+                case "le":
+                case "largeexplode":
+                return LargeExplodeParticle($pos);
+                case "bp":
+                case "bubble":
+                return new BubbleParticle($pos);
+                case "sp":
+                case "splash":
+                return new SplashParticle($pos);
+                case "wp":
+                case "water":
+                return new WaterParticle($pos);
+                case "cp":
+                case "critical":
+                return new CriticalParticle($pos);
+                case "ep":
+                case "enchant":
+                return new EnchantParticle($pos);
+                case "wd":
+                case "waterdrip":
+                return WaterDripParticle($pos);
+                case "ld":
+                case "lavadrip":
+                return new LavaDripParticle($pos);
+                case "sp":
+                case "spore":
+                return new SporeParticle($pos);
+                case "pp":
+                case "portal":
+                return new PortalParticle($pos);
+                case "fp":
+                case "flame":
+                return new FlameParticle($pos);
+                case "lp":
+                case "lava":
+                return new LavaParticle($pos);
+                case "rp":
+                case "redstone":
+                return new RedstoneParticle($pos, 1);
+                case "snowball":
+                return new ItemBreakParticle($pos, Item::get(ITEM::SNOWBALL));
+                case "hp":
+                case "heart":
+                return HearthParticle($pos, 0);
+                case "ip":
+                case "ink":
+                return new InkParticle($pos, 0);
+                case "test":
+                return new PortalParticle($pos);
+                return new FlameParticle($pos);
+            }
+            return null;
+        }
+        public function getPlayerParticle(Player $e, $particle){
+            $a = $this->particleData->getAll();
+            if ($a[$e->getName()]["particle"] !== null) return $a[$e->geTName()]["particle"];
+            else return "null";
+        }
+        public function setPaticle(Player $e, $particle){
+            $a = $this->particleData->getAll();
+            $a[$e->getName()]["particle"] = $particle;
+            $this->particleData->setAll($a);
+            $this->particleData->save();
+        }
+       public function exemptEntity(Entity $entity){
+            $this->exemptedEntities[$entity->getID()] = $entity;
+        }
+        public function isEntityExempted(Entity $entity){
+            return isset($this->exemptedEntities[$entity->getID()]);
+        }
+        public function antiEntities(){
+            $i = 0;
+            foreach ($this->getServer()->getLevels() as $levels){
+                foreach ($levels->getEntities() as $entity){
+                    if (!$this->isEntityExtempted($entity) && !($entity instanceof Creature)){
+                        $entity->close();
+                        $i++;
+                    }
+                }
+            }
+            return $i;
+        }
+        public function antiMonster(){
+            $i = 0;
+            foreach ($this->getServer()->getlevels() as $levels){
+                foreach ($levels->getEntities() as $entity){
+                    if (!$this->isEntityExempted($entity) && $entity instanceof Creature && !($entity instanceof Human)){
+                        $entity->close();
+                        $i++
+                    }
+                }
+            }
+            return $i;
+        }
+        public function getEntitiesCount(){
+            $rad = [0, 0, 0];
+            foreach ($this->getServer()->getLevels() as $levels){
+                foreach ($levels->getEntities() as $entity){
+                    if ($entity instance of Human){
+                        $rad[0]++;
+                    }elseif ($entity instanceof Creature){
+                        $rad[1]++;
+                    }else{
+                        $rad[2]++;
+                    }
+                }
+            }
+            return $rad;
+        }
+        public function getData(){
+            return $this->data;
+        }
+        public function getHealthBar(Player $e){
+            $nt = $this->pureChat->getNameTag($player, $levelName = null);
+            $health = COLOR::GREEN . $player->getHealth() . COLOR::BOLD . COLOR::RED . " ❤" . COLOR::RESET;
+            $sc = $this->alignStringCenter($nt, $health);
+            return $sc;
+        }
+        public function updateHealthBar(Player $e){
+            $e->setNameTag($this->getHealthBar($e));
+            return true;
+        }
+        public function fireworks($xx, $yy, $zz){
+            foreach ($this->getServer()->getLevels() as $levels){
+                $kpos = $xx . "." . $yy . "." . $zz;
+                $explode = explode(".", $kpos);
+                if (!isset($explode[2])) break;
+                $ppos = new Position($explode [0], $explode [1], $explode [2], $levels);
+                $players = [];
+                foreach ($this->getServer()->getOnlinePlayers() as $player);
+                if ($ppos->distance($player) < 25) $players [] = $player;
+                if (count($players) == 0) continue;
+                $levels->addSound(new ExplodeSound($ppos), $players);
+                for ($i = 1; $i <= 11; $i++){
+                    $ppos->setComponents($ppos->x, ++$ppos->y, $ppos->z);
+                    $levels->addParticle(new DustParticle($ppos, 255, 255, 255, 255), $players);
+                }
+                $hpos = new Position($ppos->x, $ppos->y - 10, $ppos->z, $levels);
+                $r = mt_rand(0, 255);
+                $b = mt_rand(0, 255);
+                $g = mt_rand(0, 255);
+                for ($r = 1; $r <= 5; $r++){
+                    $hpos->setComponents($ppos->x + mt_rand(-3, 3), $ppos->y + mt_rand(-3, 3), $ppos->z + mt_rand(-3, 3));
+                    $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
+                }
+                for ($r = 1; $r <= 5; $r++){
+                    $hpos->setComponents($ppos->x + mt_rand(-3, 3), $ppos->y + mt_rand(-3, 3), $ppos->z + mt_rand(-3, 3));
+                    $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
+                }
+                for ($r = 1; $r <= 5; $r++){
+                    $hpos->setComponents($ppos->x + mt_rand(-3, 3), $ppos->y + mt_rand(-3, 3), $ppos->z + mt_rand(-3, 3));
+                    $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
+                }
+                for ($r = 1; $r <= 5; $r++){
+                    $hpos->setComponents($ppos->x + mt_rand(-3, 3), $ppos->y + mt_rand(-3, 3), $ppos->z + mt_rand(-3, 3));
+                    $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
+                }
+                for ($r = 1; $r <= 5; $r++){
+                    $hpos->setComponents($ppos->x + mt_rand(-3, 3), $ppos->y + mt_rand(-3, 3), $ppos->z + mt_rand(-3, 3));
+                    $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
+                }
+            }
+        }
+
+
 }
