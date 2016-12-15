@@ -6,7 +6,7 @@ use pocketmine\entity\{Entity, Attribute, Effect};
 use pocketmine\nbt\tag\{CompoundTag, DoubleTag, FloatTag, ListTag};
 use pocketmine\network\protocol\{MobEffectPacket, UpdateAttributesPacket};
 use pocketmine\plugin\PluginBase;
-use pocketmine\Player;
+use pocketmine\{Player, Server};
 use pocketmine\level\particle\{AngryVillagerParticle, BubbleParticle, CriticalParticle, DustParticle, EnchantParticle, EnchantmentTableParticle, ExplodeParticle, FlameParticle, FloatingTextParticle, GenericParticle, HappyVillagerParticle, HeartParticle, HugeExplodeParticle, InkParticle, InstantEnchantParticle, ItemBreakParticle, LargeExplodeParticle, LavaDripParticle, LavaParticle, MobSpawnParticle, Particle, PortalParticle, RedstoneParticle, SmokeParticle, SplashParticle, SporeParticle, TerrainParticle, WaterDripParticle, WaterParticle};
 use pocketmine\level\sound\{ExpPickupSound, ExplodeSound};
 use pocketmine\utils\{Config, TextFormat as COLOR
@@ -15,6 +15,9 @@ use pocketmine\entity\{Creature, Effect, Entity, Human, Item as EntityItem, Livi
 };
 use pocketmine\math\Vector3;
 use SQLite3;
+use pocketmine\block\Block;
+use pocketmine\item\{Item, enchantment\Enchantment};
+use pocketmine\level\{Level, Position};
 
 
 
@@ -108,7 +111,7 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
     public $keytime = 299; //300 = Reset
     public $expiredkeys = [];
     private static $NAME = "InteruptCoreFantasy";
-    public static $index = ["mystics","holy","legends","void","enchanter"];
+    public static $indexofgreatness = ["mystics","holy","legends","void","enchanter"];//i change it name cause it will make a confusing to people
     public static $ench = ["1"];
     public $config;
     public $data;
@@ -157,6 +160,7 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
         $this->rpg = new Config($this->getDataFolder() . "rpg.yml", Config::YAML);
         $this->customEnch = new CustomEnchants();
         $this->customItem = new CustomItems();
+        $this->antiHack = new AntiHacks();
         $this->class = new Class();
         $this->races = new Races();
         $this->skills = new Skills();
@@ -214,6 +218,7 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
             Entity::registerEntity(Wither::class);
             $this->getServer()->getNetwork()->registerPacket(BossEventPacket::NETWORK_ID, BossEventPacket::class);
     }
+    $this->getLogger()->info($this->c("6", "test") . "DADADAAAAAAA~~~")
  }
     public function onDisable(){
         $this->data->save(true);
@@ -237,10 +242,28 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
             return COLOR::BOLD . COLOR::GOLD . "(" . COLOR::GREEN . "$" . COLOR::GOLD . ")" . COLOR::RESET . $a;
         }elseif ($e === "npc"){
             return COLOR::GOLD . $a;
+        }elseif ($e === "test"){
+            return COLOR::DARK_RED . "lolololololololol" . $a;
         }
     }
+    public function getDatabase(){
+        return $this->database;
+    }
+    public function isCorrectPin(Player $e, $pin){
+        if($pin == $this->database->getPin($player->getName())){
+            return true;
+        }
+        return false;
+    }
+    public function generatePin(Player $e){
+        $nPin = mt_rand(1000, 9999);
+        if($this->isCorrectPin($player, $nPin) || $nPin == 1234){
+            return $this->generatePin($e);
+        }
+        return $nPin;
+    }
     public function ranks(){
-        return array(self::DEFAULT . "BetaTester", "User", "Talented", "Prodigy", "HardWorking", "VIP", "CASHY", "King", "OverPower", "Helper", "Innoncent", "Killer");
+        return array(self::DEFAULT . "Majesty", "Emperess", "Emperor", "BetaTester", "User", "Talented", "Prodigy", "HardWorking", "VIP", "CASHY", "King", "OverPower", "Helper", "Innoncent", "Killer", "UnDefeatable", "KingOfNoobs");
     }
     public function unsetRank($e){
         $this->pureChat->unsetRank($e);
@@ -498,6 +521,57 @@ class ICF \pocketmine\plugin\PluginBase extends \pocketmine\event\Listener {
                     $levels->addParticle(new DustParticle($hpos, $r, $b, $g, 255), $players);
                 }
             }
+        }
+        public function msg($msg){
+            return $this->c("b", "icf") . $msg;
+        }
+        public static function getExplosiveEffectedBlocks(Position $center, $size){
+            if ($size < 0.1){
+                return false;
+            }
+            $effectedArea = [];
+            $illu = 16;
+            $stlen = 0.3;
+            $vector = new Vector3(0, 0, 0);
+            $vBlocks = new Vector3(0, 0, 0);
+            $millu = intval($illu - 1);
+            for ($i = 0; $i < $illu; ++$i){
+                for ($l = 0; $l < $illu; ++$l){
+                    for ($j = 0; $j < $illu; ++$j){
+                        if ($i === 0 or $i === $millu or $l === 0 or $l === $millu or $j === 0 or $j === $millu){
+                            $vector->setComponents($i / $millu * 2 -1, $l / $millu * 2 - 1, $j / $millu * 2 - 1);
+                            $vector->setComponents(($vector->x / ($lenght = $vector->lenght())) * $stlen, ($vector->z / $lenght) * $stlen);
+                            $pointX = $center->x;
+                            $pointY = $center->y;
+                            $pointZ = $center->z;
+                            for ($blaster = $size * (mt_ran(700, 1300) / 1000); $blaster > 0; $blaster -= $stlen * 0.75){
+                                $x = (int)$pointX;
+                                $y = (int)$pointY;
+                                $z = (int)$pointZ;
+                                $vBlocks->x = $pointX >+ $x ? $x : $x -1;
+                                $vBlocks->y = $pointY >+ $y ? $y : $y -1;
+                                $vBlocks->z = $pointZ >+ $z ? $z : $z -1;
+                                if ($vBlocks->y < 0 or $vBlocks->y > 127){
+                                    break;
+                                }
+                                $block = $center->level->getBlock($vBlocks);
+                                if ($block->getId() !== 0){
+                                    if ($blaster > 0){
+                                        $blaster -= ($block->getResistance() / 5 = 0.3) * $stlen;
+                                        if (!isset($effectedArea[$index = Level::blockHash($block->x, $block->y, $block->z)])){
+                                            $effectedArea[$index] = $block;
+                                        }
+                                    }
+                                }
+                                $pointX += $vector->x;
+                                $pointY += $vector->y;
+                                $pointZ += $vector->z;
+                            }
+                        }
+                    }
+                }
+            }
+            return $effectedArea;
         }
 
 
