@@ -21,11 +21,21 @@ use SQLite3;
 use pocketmine\block\Block;
 use pocketmine\item\{Item, enchantment\Enchantment};
 use pocketmine\level\{Level, Position};
+use InteruptCoreFantasy\Tasks\{
+    Envoy\StartEnvoyTask, Envoy\ClearEnvoyTask, ICFantasyFX\FXTask
+};
+use pocketmine\tile\{
+    Tile, Chest, MobSpawner
+};
+use pocketmine\inventory\ChestInventory;
+use pocketmine\nbt\NBT;
+use pocketmine\level\sound\{
+    ExpPickupSound, ExplodeSound
+};
+use InteruptCoreFantasy\PiggyAuth\{Commands\ChangePasswordCommand, Commands\ChangeEmailCommand, Commands\ForgotPasswordCommand, Commands\LoginCommand, \Commands\LogoutCommand, Commands\KeyCommand, Commands\PinCommand, Commands\PreregisterCommand, Commands\RegisterCommand, Commands\ResetPasswordCommand, Commands\SendPinCommand, Databases\MySQL, Databases\SQLite3, Entities\Wither, Packet\BossEventPacket, Tasks\AttributeTick, Tasks\KeyTick, Tasks\MessageTick, Tasks\PingTask, Tasks\PopupTipBarTick, Tasks\TimeoutTask};
 
 
-
-
-class ICF PluginBase extends Listener {
+class ICF extends PluginBase implements Listener {
 
 	const RARITY_TYPE_COMMON = 0;//COMMON RARITY
 	const RARITY_TYPE_UNCOMMON = 1;//UNCOMMON RARITY
@@ -139,21 +149,21 @@ class ICF PluginBase extends Listener {
     public $using = array();
 
     public function onLoad(){
-        @mkdir($this->getDataFolder());
-        $data = array("translate.yml", "config.yml", "chat.yml", "custom.yml", "text.yml", "vote.yml", "coordinate.yml", "rpg.yml");
-        foreach ($data as $file){
-            if (!file_exists($this->getDataFolder() . $file)){
-                @mkdir($this->getDataFolder());
-                file_put_contents($this->getDataFolder() . $file, $this->getResource($file));
+        @mkdir($this->getDataFolder());//get The Data Folder
+        $data = array("translate.yml", "config.yml", "chat.yml", "custom.yml", "text.yml", "vote.yml", "coordinate.yml", "rpg.yml");//Folder In Array Form
+        foreach ($data as $file){//The Data Array As $file
+            if (!file_exists($this->getDataFolder() . $file)){//If Not Exists , get Data Folder . [ the array data folder ]
+                @mkdir($this->getDataFolder());//mkdir get Data Folder
+                file_put_contents($this->getDataFolder() . $file, $this->getResource($file));//input content into data Folder
             }
         }
-        if (!is_dir($this->getDataFolder())) mkdir($this->getDataFolder());
-        if (!is_dir($this->getDataFolder() . "players/")) mkdir($this->getDataFolder() . "players/");
-        if (!is_dir($this->getDataFolder() . "vaults/")) mkdir($this->getDataFolder() . "vaults/");
-        if (!is_dir($this->getDataFolder() . "/bounties")) mkdir($this->getDataFolder() . "/bounties");
-        if (!is_dir($this->getDataFolder() . "Lists/")) mkdir($this->getDataFolder() . "Lists/");
-        $this->vote = new Config($this->getDataFolder() . "vote.yml", Config::YAML);
-        $this->block = new Config($this->getDataFolder() . "blocks.json", Config::JSON);
+        if (!is_dir($this->getDataFolder())) mkdir($this->getDataFolder());// data folder mkdir get Data Folder
+        if (!is_dir($this->getDataFolder() . "players/")) mkdir($this->getDataFolder() . "players/");// get Data Folder [ player ]
+        if (!is_dir($this->getDataFolder() . "vaults/")) mkdir($this->getDataFolder() . "vaults/");// get Data Folder [ vault ]
+        if (!is_dir($this->getDataFolder() . "/bounties")) mkdir($this->getDataFolder() . "/bounties");// get Data Folder [ bounties ]
+        if (!is_dir($this->getDataFolder() . "Lists/")) mkdir($this->getDataFolder() . "Lists/");// get Data Folder [ lists ]
+        $this->vote = new Config($this->getDataFolder() . "vote.yml", Config::YAML);// vote folder
+        $this->block = new Config($this->getDataFolder() . "blocks.json", Config::JSON);// json folder [ blocks ]
         $this->backups = new Config($this->getDataFolder() . "backups.txt", Config::ENUM);
         $this->dbcreative = new SQLite3($this->getDataFolder() . "blockscreative.bin");
         $this->coordinates = new Config($this->getDataFolder() . "coordinates.yml", Config::YAML);
@@ -223,6 +233,42 @@ class ICF PluginBase extends Listener {
             Entity::registerEntity(Wither::class);
             $this->getServer()->getNetwork()->registerPacket(BossEventPacket::NETWORK_ID, BossEventPacket::class);
     }
+    $outdate = false;
+    if ($this->getConfig()->get("config->update")){
+        if (!$this->getConfig()->exists("version")){
+            rename($this->getDataFolder() . "Authentication.yml", $this->getDataFolder() . "Authentication_old.yml");
+            $this->saveDefaultConfig();
+            $outdate = true;
+        }
+        elseif ($this->getConfig()->get("version") !== $this->getDescription()->getVersion()){
+            switch ($this->getConfig()->get("version")){
+                case "0.0.1":
+                case "0.0.2":
+                rename($this->getDataFolder() . "Authentication.yml", $this->getDataFolder() . "Authentication_old.yml");
+                $this->saveDefaultConfig();
+                $outdate = true;
+                break;
+            }
+            $this->getConfig()->set("version", $this->getDescription()->getVersion());
+            $this->getConfig()->save();
+        }
+    }
+    switch ($this->getConfig()->get("database")){
+        case "mysql":
+        $this->database = new MySQL($this, $outdate);
+        $this->getServer()->getScheduler()->schedulerRepeatingTask(new PingTask($this, $this->database), 300);
+        break;
+        case "sqlite3":
+        $this->database = new SQLite3($this, $outdate);
+        break;
+        default:
+        $this->database = new SQLite3($this, $outdate);
+        break;
+    }
+        $this->getServer()->getPluginManager()->registerEvents(new EventListener($this), $this);
+        foreach($this->getServer()->getOnlinePlayers() as $player) {
+            $this->startSession($player);
+        }
     $this->getLogger()->info($this->c("6", "test") . "DADADAAAAAAA~~~")
  }
     public function onDisable(){
@@ -251,8 +297,363 @@ class ICF PluginBase extends Listener {
             return COLOR::DARK_RED . "lolololololololol" . $a;
         }
     }
+    public function calculateExpReduction($p, $exp){
+        if($p instanceof Human){
+            $xp = $p->getTotalXp();
+            $p->setTotalXp($xp - $exp);
+        }
+    }
+
+    public function redeemExp($player, $exp){
+		    if($player instanceof Human){
+            $currentExp = $player->getTotalXp();
+            if ($exp > 32000) {
+                $player->sendMessage(TF::RED . TF::BOLD . "(!) " . TF::RESET . TF::RED . "You cannot redeem more than 32000 XP at once.");
+                return false;
+            }
+        		if ($currentExp >= $exp) {
+                $this->calculateExpReduction($player, $exp);
+                $xpBottle = Item::get(384, $exp, 1);
+                $xpBottle->setCustomName(TF::GREEN . TF::BOLD . "Experience Bottle " . TF::RESET . TF::GRAY . "(Throw)\n" . TF::LIGHT_PURPLE . "Value " . TF::WHITE . $exp . "\n" . TF::LIGHT_PURPLE . "Enchanter " . TF::WHITE . $player->getName());
+                $player->getInventory()->addItem($xpBottle);
+                $player->sendMessage(TF::GREEN . TF::BOLD . "XPBottle " . TF::RESET . TF::GREEN . "You have successfully redeemed " . TF::YELLOW . $exp . TF::GREEN . ".");
+                $player->getLevel()->addSound(new ExpPickupSound($player), [$player]);
+            } else {
+                $player->sendMessage(TF::RED . TF::BOLD . "XPBottle " . TF::RESET . TF::RED . "You don't have enough experience. Your current experience is " . TF::YELLOW . $currentExp);
+        		}
+        }
+    }
+
+    public function sendExperienceStatistics($p){
+        if($p instanceof Human){
+            $difference = $p->getLevelXpRequirement($p->getXpLevel()) - $p->getFilledXp();
+            $p->sendMessage(TF::GOLD . "You have " . TF::RED . $p->getFilledXp() . TF::GOLD . " exp (level " . TF::RED . $p->getXpLevel() . TF::GOLD . ") and need " . TF::RED . $difference . TF::GOLD . " more exp to level up.");
+        }
+    }
     public function getDatabase(){
         return $this->database;
+    }
+    public static function parseSpawnerList(array $list){
+        $spawners = [];
+        foreach ($list as $data) {
+            $temp = explode(", ", (string)$data);
+            $meta = (int)$temp[0];
+            if (isset($temp[2])) {
+                $spawners[$meta] = [
+                    "meta" => $meta,
+                    "id" => (int)$temp[1],
+                    "name" => "§6$temp[2]"
+                ];
+            } elseif (isset($temp[1])) {
+                $spawners[$meta] = ["meta" => $meta,
+                    "id" => (int)$temp[1],
+                    "name" => "§6Mob Spawner"
+                ];
+            }
+            continue;
+        }
+        return $spawners;
+    }
+    public static function getSpawnerMetaFromId($id, array $spawnerData){
+        foreach ($spawnerData as $data) {
+            if ($data["id"] === $id) return (int)$data["meta"];
+        }
+        return false;
+    }
+
+    public static function isStack($entity){
+        if (!$entity instanceof Player) {
+            return $entity instanceof Living and (!$entity instanceof Item) and isset($entity->namedtag->StackData);
+        }
+    }
+
+    public static function getStackSize(Living $entity){
+        if (!$entity instanceof Player && isset($entity->namedtag->StackData->Amount) && $entity->namedtag->StackData->Amount instanceof IntTag) {
+            return $entity->namedtag->StackData["Amount"];
+        }
+        return 1;
+    }
+
+    public static function increaseStackSize(Living $entity, $amount = 1){
+        if (!$entity instanceof Player && self::isStack($entity) && isset($entity->namedtag->StackData->Amount)) {
+            $entity->namedtag->StackData->Amount->setValue(self::getStackSize($entity) + $amount);
+            return true;
+        }
+        return false;
+    }
+
+    public static function decreaseStackSize(Living $entity, $amount = 1){
+        if (!$entity instanceof Player && self::isStack($entity) && isset($entity->namedtag->StackData->Amount)) {
+            $entity->namedtag->StackData->Amount->setValue(self::getStackSize($entity) - $amount);
+            return true;
+        }
+        return false;
+    }
+
+    public static function createStack(Living $entity, $count = 1){
+        if (!$entity instanceof Player) {
+            $entity->namedtag->StackData = new CompoundTag("StackData", [
+                "Amount" => new IntTag("Amount", $count),
+            ]);
+        }
+    }
+
+    public static function addToStack(Living $stack, Living $entity){
+        if (!$entity instanceof Player && is_a($entity, get_class($stack)) && $stack !== $entity) {
+            if (self::increaseStackSize($stack, self::getStackSize($entity))) {
+                $entity->close();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static function removeFromStack(Living $entity){
+        if (!$entity instanceof Player) {
+            if (self::decreaseStackSize($entity)) {
+                if (self::getStackSize($entity) <= 0) return false;
+                $level = $entity->getLevel();
+                $pos = new Vector3($entity->x, $entity->y + 1, $entity->z);
+                $server = $level->getServer();
+                $server->getPluginManager()->callEvent($ev = new \pocketmine\event\entity\EntityDeathEvent($entity, $entity->getDrops()));
+                foreach ($ev->getDrops() as $drops) {
+                    $level->dropItem($pos, $drops);
+                }
+                if ($server->expEnabled) {
+                    $exp = mt_rand($entity->getDropExpMin(), $entity->getDropExpMax());
+                    if ($exp > 0) $level->spawnXPOrb($entity, $exp);
+                }
+                return true;
+            }
+            return false;
+        }
+    }
+
+    public static function recalculateStackName(Living $entity, Config $settings){
+        if (!$entity instanceof Player) {
+            assert(self::isStack($entity));
+            $count = self::getStackSize($entity);
+            $entity->setNameTagVisible(true);
+            $entity->setNameTag(TF::YELLOW . TF::BOLD . $count . "X " . strtoupper($entity->getName()));
+        }
+    }
+
+    public static function findNearbyStack(Living $entity, $range = 16){
+        if (!$entity instanceof Player) {
+            $stack = null;
+            $closest = $range;
+            $bb = $entity->getBoundingBox();
+            $bb = $bb->grow($range, $range, $range);
+            foreach ($entity->getLevel()->getCollidingEntities($bb) as $e) {
+                if (is_a($e, get_class($entity)) and $stack !== $entity) {
+                    $distance = $e->distance($entity);
+                    if ($distance < $closest) {
+                        if (!self::isStack($e) and self::isStack($stack)) continue;
+                        $closest = $distance;
+                        $stack = $e;
+                    }
+                }
+            }
+            return $stack;
+        }
+    }
+
+    public static function addToClosestStack(Living $entity, $range = 16, Config $settings){
+        $stack = self::findNearbyStack($entity, $range);
+        if (self::isStack($stack)) {
+            if (self::addToStack($stack, $entity)) {
+                self::recalculateStackName($stack, $settings);
+                return true;
+            }
+        } else {
+            if ($stack instanceof Living && !$stack instanceof Player) {
+                self::createStack($stack);
+                self::addToStack($stack, $entity);
+                self::recalculateStackName($stack, $settings);
+                return true;
+            }
+        }
+        return false;
+    }
+    public function register(Player $player, $password, $confirmpassword, $email = "none", $xbox = "false") {
+        if(isset($this->confirmPassword[strtolower($player->getName())])) {
+            unset($this->confirmPassword[strtolower($player->getName())]);
+        }
+        if($this->isRegistered($player->getName())) {
+            $player->sendMessage($this->getMessage("already-registered"));
+            return false;
+        }
+        if(strlen($password) < $this->getConfig()->get("minimum-password-length")) {
+            $player->sendMessage($this->getMessage("password-too-short"));
+            return false;
+        }
+        if(in_array(strtolower($password), $this->getConfig()->get("blocked-passwords")) || in_array(strtolower($confirmpassword), $this->getConfig()->get("blocked-passwords"))) {
+            $player->sendMessage($this->getMessage("password-blocked"));
+            return false;
+        }
+        if(strtolower($password) == strtolower($player->getName()) || strtolower($password) == preg_replace("/\d/", "", strtolower($player->getName())) || preg_replace("/\d/", "", strtolower($password)) == strtolower($player->getName()) || preg_replace("/\d/", "", strtolower($password)) == preg_replace("/\d/", "", strtolower($player->getName()))) {
+            $player->sendMessage($this->getMessage("password-username"));
+            return false;
+        }
+        if($password !== $confirmpassword) {
+            $player->sendMessage($this->getMessage("password-not-match"));
+            return false;
+        }
+        $this->database->insertData($player, $password, $email, $xbox);
+        $this->force($player, false, $xbox == "false" ? 0 : 3);
+        if($this->getConfig()->get("progress-reports")) {
+            if($this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number") >= 0 && floor($this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number")) == $this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number")) {
+                $this->emailUser($this->getConfig()->get("progress-report-email"), "Server Progress Report", str_replace("{port}", $this->getServer()->getPort(), str_replace("{ip}", $this->getServer()->getIP(), str_replace("{players}", $this->database->getRegisteredCount(), str_replace("{player}", $player->getName(), $this->getMessage("progress-report"))))));
+            }
+        }
+        return true;
+    }
+    public function preregister($sender, $player, $password, $confirmpassword, $email = "none") {
+        if(isset($this->confirmPassword[strtolower($player)])) {
+            unset($this->confirmPassword[strtolower($player)]);
+        }
+        if($this->isRegistered($player)) {
+            $sender->sendMessage($this->getMessage("already-registered-two"));
+            return false;
+        }
+        if(strlen($password) < $this->getConfig()->get("minimum-password-length")) {
+            $sender->sendMessage($this->getMessage("password-too-short"));
+            return false;
+        }
+        if(in_array(strtolower($password), $this->getConfig()->get("blocked-passwords")) || in_array(strtolower($confirmpassword), $this->getConfig()->get("blocked-passwords"))) {
+            $sender->sendMessage($this->getMessage("password-blocked"));
+            return false;
+        }
+        if(strtolower($password) == strtolower($player) || strtolower($password) == preg_replace("/\d/", "", strtolower($player)) || preg_replace("/\d/", "", strtolower($password)) == strtolower($player)) {
+            $sender->sendMessage($this->getMessage("password-username"));
+            return false;
+        }
+        if($password !== $confirmpassword) {
+            $sender->sendMessage($this->getMessage("password-not-match"));
+            return false;
+        }
+        $this->database->insertDataWithoutPlayerObject($player, $password, $email);
+        $p = $this->getServer()->getPlayerExact($player);
+        if($p instanceof Player) {
+            $this->force($p, false);
+        }
+        if($this->getConfig()->get("progress-reports")) {
+            if($this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number") >= 0 && floor($this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number")) == $this->database->getRegisteredCount() / $this->getConfig()->get("progress-report-number")) {
+                $this->emailUser($this->getConfig()->get("progress-report-email"), "Server Progress Report", str_replace("{port}", $this->getServer()->getPort(), str_replace("{ip}", $this->getServer()->getIP(), str_replace("{players}", $this->database->getRegisteredCount(), str_replace("{player}", $player, $this->getMessage("progress-report"))))));
+            }
+        }
+        $sender->sendMessage($this->getMessage("preregister-success"));
+        return true;
+    }
+
+    public function changepassword(Player $player, $oldpassword, $newpassword) {
+        if(!$this->isRegistered($player->getName())) {
+            $player->sendMessage($this->getMessage("not-registered"));
+            return false;
+        }
+        if(!$this->isCorrectPassword($player, $oldpassword)) {
+            $player->sendMessage($this->getMessage("incorrect-password"));
+            return false;
+        }
+        $pin = $this->generatePin($player);
+        $this->database->updatePlayer($player->getName(), password_hash($newpassword, PASSWORD_BCRYPT), $this->database->getEmail($player->getName()), $pin, $player->getUniqueId()->toString(), 0);
+        $player->sendMessage(str_replace("{pin}", $pin, $this->getMessage("change-password-success")));
+        if($this->getConfig()->get("send-email-on-changepassword") && $this->database->getEmail($player) !== "none") {
+            $this->emailUser($this->database->getEmail($player->getName()), $this->getMessage("email-subject-changedpassword"), $this->getMessage("email-changedpassword"));
+        }
+        return true;
+    }
+
+    public function forgotpassword(Player $player, $pin, $newpassword) {
+        if(!$this->isRegistered($player->getName())) {
+            $player->sendMessage($this->getMessage("not-registered"));
+            return false;
+        }
+        if($this->isAuthenticated($player)) {
+            $player->sendMessage($this->getMessage("already-authenticated"));
+            return false;
+        }
+        if(!$this->isCorrectPin($player, $pin)) {
+            $player->sendMessage($this->getMessage("incorrect-pin"));
+            return false;
+        }
+        $newpin = $this->generatePin($player);
+        $this->database->updatePlayer($player->getName(), password_hash($newpassword, PASSWORD_BCRYPT), $this->database->getEmail($player->getName()), $newpin, $this->database->getUUID($player->getName()), $this->database->getAttempts($player->getName()));
+        $player->sendMessage(str_replace("{pin}", $newpin, $this->getMessage("forgot-password-success")));
+        if($this->getConfig()->get("send-email-on-changepassword") && $this->database->getEmail($player) !== "none") {
+            $this->emailUser($this->database->getEmail($player->getName()), $this->getMessage("email-subject-changedpassword"), $this->getMessage("email-changedpassword"));
+        }
+    }
+
+    public function resetpassword($player, $sender) {
+        $player = strtolower($player);
+        if($this->isRegistered($player)) {
+            if($this->getConfig()->get("send-email-on-resetpassword") && $this->database->getEmail($player) !== "none") {
+                $this->emailUser($this->database->getEmail($player), $this->getMessage("email-subject-passwordreset"), $this->getMessage("email-passwordreset"));
+            }
+            $this->database->clearPassword($player);
+            if(isset($this->authenticated[$player])) {
+                unset($this->authenticated[$player]);
+            }
+            $playerobject = $this->getServer()->getPlayerExact($player);
+            if($playerobject instanceof Player) {
+                $this->startSession($playerobject);
+            }
+            $sender->sendMessage($this->getMessage("password-reset-success"));
+            return true;
+        }
+        $sender->sendMessage($this->getMessage("not-registered-two"));
+        return false;
+    }
+
+    public function logout(Player $player, $quit = true) {
+        if($this->isAuthenticated($player)) {
+            unset($this->authenticated[strtolower($player->getName())]);
+            if(!$quit) {
+                $this->startSession($player);
+            }
+        } else {
+            if($this->getConfig()->get("adventure-mode")) {
+                if(isset($this->gamemode[strtolower($player->getName())])) {
+                    $player->setGamemode($this->gamemode[strtolower($player->getName())]);
+                    unset($this->gamemode[strtolower($player->getName())]);
+                }
+            }
+            if(isset($this->confirmPassword[strtolower($player->getName())])) {
+                unset($this->confirmPassword[strtolower($player->getName())]);
+            }
+            if(isset($this->messagetick[strtolower($player->getName())])) {
+                unset($this->messagetick[strtolower($player->getName())]);
+            }
+            if(isset($this->timeouttick[strtolower($player->getName())])) {
+                unset($this->timeouttick[strtolower($player->getName())]);
+            }
+            if(isset($this->tries[strtolower($player->getName())])) {
+                unset($this->tries[strtolower($player->getName())]);
+            }
+            if($this->getConfig()->get("boss-bar")) {
+                if(isset($this->wither[strtolower($player->getName())])) {
+                    $this->wither[strtolower($player->getName())]->kill();
+                    unset($this->wither[strtolower($player->getName())]);
+                }
+            }
+        }
+    }
+    public function getMessage($message) {
+        return str_replace("&", "§", $this->getConfig()->get($message));
+    }
+    public function isRegistered($player) {
+        return $this->database->getPlayer($player) !== null;
+    }
+    public function isCorrectPassword(Player $player, $password) {
+        if(password_verify($password, $this->database->getPassword($player->getName()))) {
+            return true;
+        }
+        return false;
+    }
+    public function isAuthenticated(Player $player) {
+        if(isset($this->authenticated[strtolower($player->getName())])) return true;
+        return false;
     }
     public function isCorrectPin(Player $e, $pin){
         if($pin == $this->database->getPin($player->getName())){
@@ -266,6 +667,157 @@ class ICF PluginBase extends Listener {
             return $this->generatePin($e);
         }
         return $nPin;
+    }
+    public function login(Player $player, $password, $mode = 0) {
+        if($this->isAuthenticated($player)) {
+            $player->sendMessage($this->getMessage("already-authenticated"));
+            return false;
+        }
+        if(!$this->isRegistered($player->getName())) {
+            $player->sendMessage($this->getMessage("not-registered"));
+            return false;
+        }
+        if(!$this->isCorrectPassword($player, $password)) {
+            if($this->getConfig()->get("key")) {
+                if($password == $this->key) {
+                    $this->changeKey();
+                    $this->keytime = 0;
+                    $this->force($player);
+                    return true;
+                }
+                if(in_array($password, $this->expiredkeys)) {
+                    $player->sendMessage($this->getMessage("key-expired"));
+                    return true;
+                }
+            }
+            if(isset($this->tries[strtolower($player->getName())])) {
+                $this->tries[strtolower($player->getName())]++;
+                if($this->tries[strtolower($player->getName())] >= $this->getConfig()->get("tries")) {
+                    $this->database->updatePlayer($player->getName(), $this->database->getPassword($player->getName()), $this->database->getEmail($player->getName()), $this->database->getPin($player->getName()), $this->database->getUUID($player->getName()), $this->database->getAttempts($player->getName()) + 1);
+                    $player->kick($this->getMessage("too-many-tries"));
+                    if($this->database->getEmail($player->getName()) !== "none") {
+                        $this->emailUser($this->database->getEmail($player->getName()), $this->getMessage("email-subject-attemptedlogin"), $this->getMessage("email-attemptedlogin"));
+                    }
+                    return false;
+                }
+            } else {
+                $this->tries[strtolower($player->getName())] = 1;
+            }
+            $tries = $this->getConfig()->get("tries") - $this->tries[strtolower($player->getName())];
+            $player->sendMessage(str_replace("{tries}", $tries, $this->getMessage("incorrect-password")));
+            return false;
+        }
+        $this->force($player, true, $mode);
+        return true;
+    }
+    public function force(Player $player, $login = true, $mode = 0) {
+        if(isset($this->messagetick[strtolower($player->getName())])) {
+            unset($this->messagetick[strtolower($player->getName())]);
+        }
+        if(isset($this->timeouttick[strtolower($player->getName())])) {
+            unset($this->timeouttick[strtolower($player->getName())]);
+        }
+        if(isset($this->tries[strtolower($player->getName())])) {
+            unset($this->tries[strtolower($player->getName())]);
+        }
+        if(isset($this->joinMessage[strtolower($player->getName())]) && $this->getConfig()->get("hold-join-message")) {
+            $this->getServer()->broadcastMessage($this->joinMessage[strtolower($player->getName())]);
+            unset($this->joinMessage[strtolower($player->getName())]);
+        }
+        $this->authenticated[strtolower($player->getName())] = true;
+        if($this->getConfig()->get("invisible")) {
+            $player->setDataFlag(Entity::DATA_FLAGS, Entity::DATA_FLAG_INVISIBLE, false);
+            $player->setNameTagVisible(true);
+        }
+        if($this->getConfig()->get("blindness")) {
+            $player->removeEffect(15);
+            $player->removeEffect(16);
+        }
+        if($this->getConfig()->get("hide-players")) {
+            foreach($this->getServer()->getOnlinePlayers() as $p) {
+                $player->showPlayer($p);
+            }
+        }
+        if($this->getConfig()->get("hide-health")) {
+            $pk = new UpdateAttributesPacket();
+            $pk->entityId = 0;
+            $pk->entries = [$player->getAttributeMap()->getAttribute(Attribute::HEALTH)];
+            $player->dataPacket($pk);
+        }
+        if($this->getConfig()->get("hide-hunger")) {
+            $pk = new UpdateAttributesPacket();
+            $pk->entityId = 0;
+            $pk->entries = [$player->getAttributeMap()->getAttribute(Attribute::HUNGER)];
+            $player->dataPacket($pk);
+        }
+        if($this->getConfig()->get("hide-xp")) {
+            $pk = new UpdateAttributesPacket();
+            $pk->entityId = 0;
+            $pk->entries = [$player->getAttributeMap()->getAttribute(Attribute::EXPERIENCE)];
+            $player->dataPacket($pk);
+        }
+        if($this->getConfig()->get("hide-effects")) {
+            $player->sendPotionEffects($player);
+        }
+        if($this->getConfig()->get("return-to-spawn")) {
+            $player->teleport($this->getServer()->getDefaultLevel()->getSafeSpawn());
+        }
+        if($login) {
+            switch($mode) {
+                case 1:
+                    $player->sendMessage($this->getMessage("authentication-success-uuid"));
+                    break;
+                case 2:
+                    $player->sendMessage($this->getMessage("authentication-success-xbox"));
+                    break;
+                case 0:
+                default:
+                    $player->sendMessage($this->getMessage("authentication-success"));
+                    break;
+            }
+            if(!$this->database->getAttempts($player->getName()) == 0) {
+                $player->sendMessage(str_replace("{attempts}", $this->database->getAttempts($player->getName()), $this->getMessage("attempted-logins")));
+
+            }
+        } else {
+            if(!$mode == 3) {
+                $player->sendMessage(str_replace("{pin}", $this->database->getPin($player->getName()), $this->getMessage("register-success")));
+            }
+        }
+        if($this->getConfig()->get("cape-for-registration")) {
+            $cape = "Minecon_MineconSteveCape2016";
+            if(isset($this->keepCape[strtolower($player->getName())])) {
+                $cape = $this->keepCape[strtolower($player->getName())];
+                unset($this->keepCape[strtolower($player->getName())]);
+            } else {
+                $capes = array(
+                    "Minecon_MineconSteveCape2016",
+                    "Minecon_MineconSteveCape2015",
+                    "Minecon_MineconSteveCape2013",
+                    "Minecon_MineconSteveCape2012",
+                    "Minecon_MineconSteveCape2011");
+                $cape = array_rand($capes);
+                $cape = $capes[$cape];
+            }
+            $player->setSkin($player->getSkinData(), $cape);
+        }
+        if($this->getConfig()->get("hide-items")) {
+            $player->getInventory()->sendContents($player);
+        }
+        if($this->getConfig()->get("adventure-mode")) {
+            if(isset($this->gamemode[strtolower($player->getName())])) {
+                $player->setGamemode($this->gamemode[strtolower($player->getName())]);
+                unset($this->gamemode[strtolower($player->getName())]);
+            }
+        }
+        if($this->getConfig()->get("boss-bar")) {
+            if(isset($this->wither[strtolower($player->getName())])) {
+                $this->wither[strtolower($player->getName())]->kill();
+                unset($this->wither[strtolower($player->getName())]);
+            }
+        }
+        $this->database->updatePlayer($player->getName(), $this->database->getPassword($player->getName()), $this->database->getEmail($player->getName()), $this->database->getPin($player->getName()), $player->getUniqueId()->toString(), 0);
+        return true;
     }
     public function ranks(){
         return array(self::DEFAULT . "Majesty", "Emperess", "Emperor", "BetaTester", "User", "Talented", "Prodigy", "HardWorking", "VIP", "CASHY", "King", "OverPower", "Helper", "Innoncent", "Killer", "UnDefeatable", "KingOfNoobs");
@@ -696,6 +1248,291 @@ class ICF PluginBase extends Listener {
             $tile->getInventory()->addItem(new Item(54, $i, 1));
         }
         $e->>addWindow($tile->getInventories());
+    }
+    //Code by @xBeastMode
+    public function emailUser($to, $title, $body) {
+        $ch = curl_init();
+        $title = str_replace(" ", "+", $title);
+        $body = str_replace(" ", "+", $body);
+        $url = 'https://puremc.pw/mailserver/?to=' . $to . '&subject=' . $title . '&body=' . $body;
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_REFERER, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $result = curl_exec($ch);
+        curl_close($ch);
+        return $result;
+    }
+    public function startSession(Player $player) {
+        if(strtolower($player->getName()) == "steve" && $this->getConfig()->get("steve-bypass")) {
+            $this->authenticated[strtolower($player->getName())] = true;
+            return true;
+        }
+        $player->sendMessage($this->getMessage("join-message"));
+        $this->messagetick[strtolower($player->getName())] = 0;
+        if($this->getConfig()->get("cape-for-registration")) {
+            $stevecapes = array(
+                "Minecon_MineconSteveCape2016",
+                "Minecon_MineconSteveCape2015",
+                "Minecon_MineconSteveCape2013",
+                "Minecon_MineconSteveCape2012",
+                "Minecon_MineconSteveCape2011");
+            if(in_array($player->getSkinId(), $stevecapes)) {
+                $this->keepCape[strtolower($player->getName())] = $player->getSkinId();
+                $player->setSkin($player->getSkinData(), "Standard_Custom");
+            } else {
+                $alexcapes = array(
+                    "Minecon_MineconAlexCape2016",
+                    "Minecon_MineconAlexCape2015",
+                    "Minecon_MineconAlexCape2013",
+                    "Minecon_MineconAlexCape2012",
+                    "Minecon_MineconAlexCape2011");
+                if(in_array($player->getSkinId(), $alexcapes)) {
+                    $this->keepCape[strtolower($player->getName())] = $player->getSkinId();
+                    $player->setSkin($player->getSkinData(), "Standard_CustomSlim");
+                }
+            }
+        }
+        if($this->isRegistered($player->getName())) {
+            $player->sendMessage($this->getMessage("login"));
+        } else {
+            $player->sendMessage($this->getMessage("register"));
+        }
+        if($this->getConfig()->get("invisible")) {
+            $player->setDataFlag(Entity::DATA_FLAGS, Entity::DATA_FLAG_INVISIBLE, true);
+            $player->setNameTagVisible(false);
+        }
+        if($this->getConfig()->get("blindness")) {
+            $effect = Effect::getEffect(15);
+            $effect->setAmplifier(99);
+            $effect->setDuration(999999);
+            $effect->setVisible(false);
+            $player->addEffect($effect);
+            $effect = Effect::getEffect(16);
+            $effect->setAmplifier(99);
+            $effect->setDuration(999999);
+            $effect->setVisible(false);
+            $player->addEffect($effect);
+        }
+        if($this->getConfig()->get("hide-players")) {
+            foreach($this->getServer()->getOnlinePlayers() as $p) {
+                $player->hidePlayer($p);
+                if(!$this->isAuthenticated($p)) {
+                    $p->hidePlayer($player);
+                }
+            }
+        }
+        if($this->getConfig()->get("hide-effects")) {
+            foreach($player->getEffects() as $effect) {
+                if($this->getConfig()->get("blindness") && ($effect->getId() == 15 || $effect->getId() == 16)) {
+                    continue;
+                }
+                $pk = new MobEffectPacket();
+                $pk->eid = 0;
+                $pk->eventId = MobEffectPacket::EVENT_REMOVE;
+                $pk->effectId = $effect->getId();
+                $player->dataPacket($pk);
+            }
+        }
+        if($this->getConfig()->get("adventure-mode")) {
+            $this->gamemode[strtolower($player->getName())] = $player->getGamemode();
+            $player->setGamemode(2);
+        }
+        if($this->getConfig()->get("timeout")) {
+            $this->timeouttick[strtolower($player->getName())] = 0;
+        }
+        if($this->getConfig()->get("boss-bar")) {
+            $wither = Entity::createEntity("Wither", $player->getLevel()->getChunk($player->x >> 4, $player->z >> 4), new CompoundTag("", ["Pos" => new ListTag("Pos", [new DoubleTag("", $player->x + 0.5), new DoubleTag("", $player->y + 25), new DoubleTag("", $player->z + 0.5)]), "Motion" => new ListTag("Motion", [new DoubleTag("", 0), new DoubleTag("", 0), new DoubleTag("", 0)]), "Rotation" => new ListTag("Rotation", [new FloatTag("", 0), new FloatTag("", 0)])]));
+            $wither->spawnTo($player);
+            $wither->setNameTag($this->isRegistered($player->getName()) == false ? $this->getMessage("register-boss-bar") : $this->getMessage("login-boss-bar"));
+            $this->wither[strtolower($player->getName())] = $wither;
+            $wither->setMaxHealth($this->getConfig()->get("timeout-time"));
+            $wither->setHealth($this->getConfig()->get("timeout-time"));
+            $pk = new BossEventPacket();
+            $pk->eid = $wither->getId();
+            $pk->state = 0;
+            $player->dataPacket($pk);
+        }
+    }
+
+    public function getKey($password) {
+        if(password_verify($password, $this->database->getPassword($this->getConfig()->get("owner")))) {
+            return $this->key;
+        }
+        return false;
+    }
+
+    public function changeKey() {
+        array_push($this->expiredkeys, $this->key);
+        $characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';
+        $key = [];
+        $characteramount = strlen($characters) - 1;
+        for($i = 0; $i < $this->getConfig()->get("minimum-password-length"); $i++) {
+            $character = mt_rand(0, $characteramount);
+            array_push($key, $characters[$character]);
+        }
+        $key = implode("", $key);
+        if($this->key == $key) {
+            $this->changeKey();
+            return false;
+        }
+        $this->key = $key;
+        return true;
+    }
+    public function isBackupPlayer($player){
+        return $this->backups->exists(strtolower($player), true);
+    }
+
+    public function addBackup($player){
+        $this->backups->set(strtolower($player));
+        $this->backups->save();
+    }
+
+    public function removeBackup($player){
+        $this->backups->remove(strtolower($player));
+        $this->backups->save();
+    }
+
+    public function sendBackups(CommandSender $issuer){
+        $backupCount = 0;
+        $backupNames = "";
+        foreach (file($this->getDataFolder() . "backups.txt", FILE_SKIP_EMPTY_LINES) as $name) {
+            $backupNames .= trim($name) . ", ";
+            $backupCount++;
+        }
+        $issuer->sendMessage($this->p("f", "text") . "Security facts:");
+        $issuer->sendMessage(TF::YELLOW . $backupCount . TF::GOLD . " players are verified and are having OP status.");
+        $issuer->sendMessage(TF::YELLOW . "List of verified ops: " . TF::GOLD . TF::ITALIC . substr($backupNames, 0, -2));
+    }
+
+    public function restoreOps(){
+        foreach ($this->getServer()->getOnlinePlayers() as $player) {
+            if (!$this->isBackupPlayer($player->getName()) and $player->isOp()) {
+                $player->setOp(false);
+                $why = $this->getConfig()->get("kickReason");
+                $bannedDude = $player->getName();
+                $server = $this->getServer();
+                $server->getIPBans()->addBan($player->getAddress(), $why);
+                $server->getNameBans()->addBan($player->getName(), $why);
+                $player->kick($this->getConfig()->get("kickReason"), false);
+                if ($this->getConfig()->get("notifyAll")) {
+                    $this->getServer()->broadcastMessage($this->getFixedMessage($player, $this->getConfig()->get("notifyMessage")));
+                }
+            }
+            if ($this->isBackupPlayer($player->getName()) and !$player->isOp()) {
+                $player->setOp(true);
+            }
+        }
+    }
+
+    public function getFixedMessage(Player $player, $message){
+        return str_replace([
+            "{PLAYER_ADDRESS}",
+            "{PLAYER_DISPLAY_NAME}",
+            "{PLAYER_NAME}",
+            "{PLAYER_PORT}"
+        ],
+            [
+                $player->getAddress(),
+                $player->getDisplayName(),
+                $player->getName(),
+                $player->getPort()
+            ],
+            $message
+        );
+    }
+
+    public function addBounty($name, $amount){
+        $name = strtolower($name);
+        $cfg = new Config($this->getDataFolder() . "/bounties/" . $name . ".yml", Config::YAML);
+        $b = $cfg->get("bounty");
+        $cfg->set("bounty", (int)$b + (int)$amount);
+        $cfg->save();
+    }
+
+    public function setBounty($name, $amount){
+        $name = strtolower($name);
+        $cfg = new Config($this->getDataFolder() . "/bounties/" . $name . ".yml", Config::YAML);
+        $cfg->set("bounty", (int)$amount);
+        $cfg->save();
+    }
+
+    public function getBounty($name, $issuer){
+        $name = strtolower($name);
+        $cfg = new Config($this->getDataFolder() . "/bounties/" . $name . ".yml");
+        $amount = $cfg->get("bounty");
+        if ($amount > 24999) {
+            $issuer->sendMessage(TF::BOLD . TF::DARK_GRAY . "<" . TF::AQUA . "Cosmic" . TF::WHITE . "Bounty" . TF::DARK_GRAY . "> " . TF::RESET . TF::AQUA . $name . TF::WHITE . " has a bounty of" . TF::AQUA . " $" . $amount . TF::WHITE . " on his head!");
+        } else {
+            $issuer->sendMessage($this->p("c", "!") . "This player doesn't have a bounty set!");
+        }
+    }
+    public function isItemDisabled($item){
+    	$config = $this->getConfig();
+        $disabledItems = $config['disabled-items'];
+        foreach ($disabledItems as $disableItem) {
+            $this->disableItems[] = $disableItem;
+        }
+        return in_array($item, $this->disableItems, true);
+    }
+    public function hasPrivateVault($player){
+        if ($player instanceof Player) $player = $player->getName();
+        $player = strtolower($player);
+        return is_file($this->getDataFolder() . "vaults/" . $player . ".yml");
+    }
+
+    public function createVault($player, $number){
+        if ($player instanceof Player) $player = $player->getName();
+        $player = strtolower($player);
+        $cfg = new Config($this->getDataFolder() . "vaults/" . $player . ".yml", Config::YAML);
+        $cfg->set("items", array());
+        for ($i = 0; $i < 26; $i++) {
+            $cfg->setNested("$number.items." . $i, array(0, 0, 0, array(), ""));
+        }
+        $cfg->save();
+    }
+
+    public function loadVault(Player $player, $number){
+        $block = Block::get(54, 15);
+        $player->getLevel()->setBlock(new Vector3($player->x, $player->y - 4, $player->z), $block, true, true);
+        $nbt = new CompoundTag("", [
+            new ListTag("Items", []),
+            new StringTag("id", Tile::CHEST),
+            new StringTag("CustomName", TF::GOLD . "Vault #" . $number),
+            new IntTag("x", floor($player->x)),
+            new IntTag("y", floor($player->y) - 4),
+            new IntTag("z", floor($player->z))
+        ]);
+        $nbt->Items->setTagType(NBT::TAG_Compound);
+        $tile = Tile::createTile("Chest", $player->getLevel()->getChunk($player->getX() >> 4, $player->getZ() >> 4), $nbt);
+        if ($player instanceof Player) {
+            $player = $player->getName();
+        }
+        $player = strtolower($player);
+        $cfg = new Config($this->getDataFolder() . "vaults/" . $player . ".yml", Config::YAML);
+        $tile->getInventory()->clearAll();
+        for ($i = 0; $i < 26; $i++) {
+            $ite = $cfg->getNested($number.".items." . $i);
+            $item = Item::get($ite[0]);
+            $item->setDamage($ite[1]);
+            $item->setCount($ite[2]);
+            if (isset($ite[4])) {
+                $notname = $ite[4];
+                $exploded = explode("\n", $notname);
+                $name = $exploded[0];
+                $item->setCustomName($name);
+            }
+
+            foreach ($ite[3] as $key => $en) {
+                $enId = $en[0];
+                $enLevel = $en[1];
+                $this->reward->ce($item, $enId, $enLevel);
+            }
+            $tile->getInventory()->setItem($i, $item);
+        }
+        return $tile->getInventory();
     }
 
 
